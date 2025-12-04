@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 import json
+from backend.auth import UserAuth
+
 
 # ========== PAGE SETUP ==========
 st.set_page_config(
@@ -150,23 +152,23 @@ def get_recommendation(stock_data):
     price_vs_ma20 = stock_data['current_price'] > stock_data['ma20']
     
     if rsi < 30 and change > 0:
-        return "BUY", "Oversold with positive momentum", "🟢"
+        return "BUY", "Oversold with positive momentum", "green"
     elif rsi > 70 and change < 0:
-        return "SELL", "Overbought with negative momentum", "🔴"
+        return "SELL", "Overbought with negative momentum", "red"
     elif price_vs_ma20 and change > 0:
-        return "BUY", "Above MA20 with uptrend", "🟢"
+        return "BUY", "Above MA20 with uptrend", "green"
     elif not price_vs_ma20 and change < 0:
-        return "SELL", "Below MA20 with downtrend", "🔴"
+        return "SELL", "Below MA20 with downtrend", "red"
     else:
-        return "HOLD", "Neutral market conditions", "🟡"
+        return "HOLD", "Neutral market conditions", "orange"
 
 # ========== UI ==========
-st.title("🤖 STOCKMIND AI")
+st.title("STOCKMIND AI")
 st.markdown("### Smart Stock Analysis Tool")
 
 # Sidebar
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header("Settings")
     
     # Stock input
     symbol = st.text_input("Stock Symbol", "BBCA").upper()
@@ -186,7 +188,7 @@ with st.sidebar:
     )
     
     # Popular stocks
-    st.markdown("### 🔥 Popular Stocks")
+    st.markdown("### Popular Stocks")
     popular_stocks = ["BBCA", "BBRI", "BMRI", "TLKM", "ASII", "UNVR", "ICBP", "INDF"]
     cols = st.columns(2)
     for idx, stock in enumerate(popular_stocks):
@@ -195,11 +197,32 @@ with st.sidebar:
             st.rerun()
     
     # Analyze button
-    analyze_clicked = st.button("🚀 Analyze Stock", type="primary", use_container_width=True)
+    analyze_clicked = st.button("Analyze Stock", type="primary", use_container_width=True)
     
     st.markdown("---")
-    st.caption("📊 Data from Yahoo Finance")
-    st.caption("⚡ Powered by Streamlit")
+    
+    # Authentication section
+    from backend.auth import UserAuth
+    
+    if UserAuth.is_authenticated():
+        user = UserAuth.get_current_user()
+        st.markdown(f"### 👤 {user['username']}")
+        if st.button("Logout"):
+            UserAuth.logout()
+    else:
+        st.markdown("### Account")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Login", use_container_width=True):
+                st.switch_page("pages/login.py")
+        with col2:
+            if st.button("Register", use_container_width=True):
+                st.switch_page("pages/register.py")
+    # 🔼 SAMPAI SINI 🔼
+    
+    st.markdown("---")
+    st.caption("Data from Yahoo Finance")
+    st.caption("Powered by Streamlit")
 
 # Main Content - Tabs
 if analyze_clicked or symbol:
@@ -208,7 +231,7 @@ if analyze_clicked or symbol:
         
         if stock_data and hist_data is not None:
             # Create tabs
-            tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📈 Technical", "📋 Details"])
+            tab1, tab2, tab3 = st.tabs(["Dashboard", "Technical", "Details"])
             
             with tab1:
                 # Display metrics
@@ -222,7 +245,7 @@ if analyze_clicked or symbol:
                     )
                 
                 with col2:
-                    rsi_status = "🟢 Oversold" if stock_data['rsi'] < 30 else "🔴 Overbought" if stock_data['rsi'] > 70 else "🟡 Neutral"
+                    rsi_status = "Oversold" if stock_data['rsi'] < 30 else "Overbought" if stock_data['rsi'] > 70 else "Neutral"
                     st.metric(
                         label="RSI (14)",
                         value=f"{stock_data['rsi']:.2f}",
@@ -230,7 +253,7 @@ if analyze_clicked or symbol:
                     )
                 
                 with col3:
-                    trend = "🟢 Bullish" if stock_data['current_price'] > stock_data['ma20'] > stock_data['ma50'] else "🔴 Bearish"
+                    trend = "Bullish" if stock_data['current_price'] > stock_data['ma20'] > stock_data['ma50'] else "Bearish"
                     st.metric(
                         label="Trend",
                         value=trend,
@@ -243,24 +266,23 @@ if analyze_clicked or symbol:
                     )
                 
                 # Simple chart
-                st.subheader("📊 Price Chart")
+                st.subheader("Price Chart")
                 fig_simple = create_simple_chart(hist_data, symbol)
                 st.plotly_chart(fig_simple, use_container_width=True)
                 
                 # Recommendation
-                st.subheader("💡 Recommendation")
-                rec_action, rec_reason, rec_icon = get_recommendation(stock_data)
+                st.subheader("Recommendation")
+                rec_action, rec_reason, rec_color = get_recommendation(stock_data)
                 
-                rec_color = {'BUY': 'green', 'SELL': 'red', 'HOLD': 'orange'}.get(rec_action, 'blue')
                 st.markdown(f"""
                 <div style='background-color:{rec_color}20; padding:20px; border-radius:10px; border-left:5px solid {rec_color}'>
-                    <h2 style='color:{rec_color}; margin:0;'>{rec_icon} {rec_action}</h2>
+                    <h2 style='color:{rec_color}; margin:0;'>{rec_action}</h2>
                     <p style='margin:10px 0 0 0;'>{rec_reason}</p>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 # Quick stats
-                st.subheader("📈 Quick Stats")
+                st.subheader("Quick Stats")
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.info(f"**Company:** {stock_data['name']}")
@@ -271,14 +293,14 @@ if analyze_clicked or symbol:
             
             with tab2:
                 # Technical analysis
-                st.subheader("📈 Technical Analysis")
+                st.subheader("Technical Analysis")
                 
                 # Advanced chart
                 fig_tech = create_technical_chart(hist_data)
                 st.plotly_chart(fig_tech, use_container_width=True)
                 
                 # Technical indicators explanation
-                st.subheader("📋 Indicator Interpretation")
+                st.subheader("Indicator Interpretation")
                 
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -308,7 +330,7 @@ if analyze_clicked or symbol:
             
             with tab3:
                 # Detailed data
-                st.subheader("📋 Detailed Data")
+                st.subheader("Detailed Data")
                 
                 # Show recent data
                 recent_data = hist_data.tail(10).copy()
@@ -317,10 +339,11 @@ if analyze_clicked or symbol:
                 recent_data['MA20'] = recent_data['MA20'].apply(lambda x: f"Rp {x:,.2f}")
                 recent_data['RSI'] = recent_data['RSI'].apply(lambda x: f"{x:.1f}")
                 
-                st.dataframe(recent_data[['Close', 'Volume', 'MA20', 'RSI']], use_container_width=True)
+                # Use st.table() instead of st.dataframe() to avoid pyarrow issue
+                st.table(recent_data[['Close', 'Volume', 'MA20', 'RSI']].reset_index().rename(columns={'index': 'Date'}))
                 
                 # Statistics
-                st.subheader("📊 Statistics")
+                st.subheader("Statistics")
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -336,31 +359,31 @@ if analyze_clicked or symbol:
                     st.write(f"- Max: {hist_data['Volume'].max():,}")
                 
         else:
-            st.error(f"❌ Cannot fetch data for {symbol}. Please check the stock symbol.")
+            st.error(f"Cannot fetch data for {symbol}. Please check the stock symbol.")
 else:
     # Welcome screen
     col1, col2 = st.columns([2, 1])
     
     with col1:
         st.markdown("""
-        ## 👋 Welcome to STOCKMIND AI!
+        ## Welcome to STOCKMIND AI!
         
         **Your intelligent stock analysis assistant.**
         
-        ### 📈 Features:
+        ### Features:
         - Real-time stock data from Yahoo Finance
         - Technical indicators (RSI, Moving Averages)
         - Interactive charts with Plotly
         - Simple buy/sell recommendations
         - Indonesian stock market focus
         
-        ### 🚀 How to use:
+        ### How to use:
         1. Enter stock symbol in sidebar
         2. Select time period
         3. Click "Analyze Stock" button
         4. Explore different tabs for insights
         
-        ### 🔥 Popular Indonesian Stocks:
+        ### Popular Indonesian Stocks:
         - **BBCA** - Bank Central Asia
         - **BBRI** - Bank Rakyat Indonesia  
         - **BMRI** - Bank Mandiri
@@ -370,7 +393,7 @@ else:
         """)
     
     with col2:
-        st.subheader("📱 Quick Preview")
+        st.subheader("Quick Preview")
         
         example_data = [
             {"Symbol": "BBCA", "Price": "Rp 9,850", "Change": "+1.5%"},
@@ -396,8 +419,8 @@ else:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center'>
-    <p>© 2024 STOCKMIND AI - Smart Stock Analysis Tool</p>
-    <p><small>📊 Data from Yahoo Finance | 🚀 Built with Streamlit | 📈 For educational purposes only</small></p>
+    <p>© 2024 STOCKREADER AI - Smart Stock Analysis Tool</p>
+    <p><small>Data from Yahoo Finance | Built with Streamlit | For educational purposes only</small></p>
     <p><small><i>Not financial advice. Always do your own research before investing.</i></small></p>
 </div>
 """, unsafe_allow_html=True)

@@ -1,43 +1,33 @@
+# test_connection.py
 import pymysql
+from dotenv import load_dotenv
+import os
 
-print("🔧 Testing Connection to Empty Database...")
+load_dotenv()
 
 try:
-    g
-    connection = pymysql.connect(
-        host='localhost',
-        user='root',
-        password='',
-        database='stockreader_ai'
+    conn = pymysql.connect(
+        host=os.getenv('DB_HOST'),
+        user=os.getenv('DB_USER'),
+        password=os.getenv('DB_PASSWORD'),
+        database=os.getenv('DB_NAME')
     )
+    print("✅ Database connected successfully!")
+    print(f"Database: {os.getenv('DB_NAME')}")
     
-    print("✅ SUCCESS! Database connected!")
-    print("📊 Database: stockreader_ai")
-    print("👤 User: root")
-    print("🔗 Host: localhost")
+    # Cek tables
+    cursor = conn.cursor()
+    cursor.execute("SHOW TABLES")
+    tables = cursor.fetchall()
+    print(f"Tables found: {len(tables)}")
+    for table in tables:
+        print(f"  - {table[0]}")
     
-    # Simple check - no tuple/dict issues
-    cursor = connection.cursor()
-    cursor.execute("SELECT 'CONNECTION_OK' as status")
-    status = cursor.fetchone()[0]
-    print(f"✅ Status: {status}")
+    conn.close()
     
-    cursor.close()
-    connection.close()
-    
-    print("\n🎉 Database ready for application!")
-    print("📝 Tables will be created automatically by the app.")
-    
-except pymysql.err.OperationalError as e:
-    if "Unknown database" in str(e):
-        print("❌ ERROR: Database 'stockreader_ai' not found!")
-        print("\n🔧 SOLUSI: Buat database dengan:")
-        print("1. Buka Laragon Terminal")
-        print("2. Ketik: mysql -u root -p")
-        print("3. Tekan Enter untuk password (kosong)")
-        print("4. Ketik: CREATE DATABASE stockreader_ai;")
-        print("5. Ketik: EXIT;")
-    else:
-        print(f"❌ Connection error: {e}")
 except Exception as e:
-    print(f"❌ Unexpected error: {e}")
+    print(f"❌ Database error: {e}")
+    print("\n🔧 Troubleshooting:")
+    print("1. Pastikan Laragon MySQL running")
+    print("2. Database 'stockreader_db' sudah dibuat")
+    print("3. Username: root, Password: (kosong)")
