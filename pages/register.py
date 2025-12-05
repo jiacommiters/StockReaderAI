@@ -8,6 +8,13 @@ st.set_page_config(
     layout="centered"
 )
 
+# ========== INITIALIZE SESSION STATE ==========
+# Initialize session state for authentication persistence
+if 'user' not in st.session_state:
+    st.session_state.user = None
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
 # Redirect if already logged in
 if UserAuth.is_authenticated():
     st.success("You are already logged in!")
@@ -174,12 +181,12 @@ with st.form("register_form"):
             if success:
                 st.success(message)
                 st.info("You can now login with your credentials")
-                st.page_link("pages/2_Login.py", label="Go to Login")
+                st.page_link("login.py", label="Go to Login")
             else:
                 st.error(message)
 
 st.markdown("""
 <div class="login-link">
-    <p>Already have an account? <a href="/2_Login" style="color: #667eea; text-decoration: none; font-weight: 500;">Login here</a></p>
+    <p>Already have an account? <a href="login.py" style="color: #667eea; text-decoration: none; font-weight: 500;">Login here</a></p>
 </div>
 """, unsafe_allow_html=True)

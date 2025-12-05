@@ -5,8 +5,15 @@ from backend.auth import UserAuth
 st.set_page_config(
     page_title="STOCKREADER AI - Home",
     page_icon="📈",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
+
+# ========== INITIALIZE SESSION STATE ==========
+if 'user' not in st.session_state:
+    st.session_state.user = None
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
 
 # ========== CUSTOM CSS ==========
 st.markdown("""
@@ -132,20 +139,35 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========== NAVIGATION BAR ==========
-col1, col2 = st.columns([3, 2])
-with col1:
-    st.markdown("<h1 style='color: #667eea; margin: 0;'>STOCKREADER AI</h1>", unsafe_allow_html=True)
+nav_col_left, nav_col_center, nav_col_right = st.columns([2, 3, 2])
 
-with col2:
-    st.markdown("""
-    <div class="nav-links">
-        <a href="/" class="nav-link">Home</a>
-        <a href="/2_Login" class="nav-link">Login</a>
-        <a href="/3_Register" class="nav-link">Register</a>
-        <a href="/" class="nav-link">Dashboard</a>
-        <a href="#features" class="nav-link">Features</a>
-    </div>
-    """, unsafe_allow_html=True)
+with nav_col_left:
+    st.markdown("<h2 style='color: #667eea; margin: 0;'>STOCKREADER AI</h2>", unsafe_allow_html=True)
+
+with nav_col_center:
+    center_col_a, center_col_b, center_col_c = st.columns(3)
+    with center_col_a:
+        st.page_link("pages/home.py", label="Home")
+    with center_col_b:
+        st.page_link("app.py", label="Stock Analyzer")
+    with center_col_c:
+        st.markdown("<a class='nav-link' href='#features'>Features</a>", unsafe_allow_html=True)
+
+with nav_col_right:
+    if UserAuth.is_authenticated():
+        user = UserAuth.get_current_user()
+        st.markdown(
+            f"<div style='text-align: right; font-weight: 600;'>👤 {user['username']}</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        login_col, register_col = st.columns([1, 1])
+        with login_col:
+            if st.button("Login", use_container_width=True):
+                st.switch_page("pages/login.py")
+        with register_col:
+            if st.button("Register", use_container_width=True, type="primary"):
+                st.switch_page("pages/register.py")
 
 # ========== HERO SECTION ==========
 st.markdown("""

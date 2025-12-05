@@ -21,16 +21,32 @@ st.set_page_config(
 # Load environment (untuk masa depan)
 load_dotenv()
 
+# ========== INITIALIZE SESSION STATE ==========
+# Initialize session state for authentication persistence
+if 'user' not in st.session_state:
+    st.session_state.user = None
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
 # ========== FUNCTIONS ==========
 def get_stock_data(symbol, period='1mo'):
     """Get stock data from Yahoo Finance with technical indicators"""
     try:
+        # Handle IHSG index (^JKSE) - don't add .JK
+        if symbol.startswith('^'):
+            # It's an index, use as is
+            pass
         # Add .JK for Indonesian stocks
-        if not symbol.endswith('.JK') and len(symbol) <= 4:
+        elif not symbol.endswith('.JK') and len(symbol) <= 4:
             symbol = f'{symbol}.JK'
         
         stock = yf.Ticker(symbol)
         hist = stock.history(period=period)
+        # Fallbacks if empty (common on short periods or holidays)
+        if hist.empty and period in ["1d", "5d"]:
+            hist = stock.history(period="1mo")
+        if hist.empty:
+            hist = stock.history(period="3mo")
         
         if hist.empty:
             return None, None
@@ -38,6 +54,11 @@ def get_stock_data(symbol, period='1mo'):
         # Calculate technical indicators manually
         hist['MA20'] = hist['Close'].rolling(window=20).mean()
         hist['MA50'] = hist['Close'].rolling(window=50).mean()
+        # Bollinger Bands
+        hist['BB_MID'] = hist['Close'].rolling(window=20).mean()
+        hist['BB_STD'] = hist['Close'].rolling(window=20).std()
+        hist['BB_UPPER'] = hist['BB_MID'] + 2 * hist['BB_STD']
+        hist['BB_LOWER'] = hist['BB_MID'] - 2 * hist['BB_STD']
         
         # Calculate RSI manually
         delta = hist['Close'].diff()
@@ -45,6 +66,21 @@ def get_stock_data(symbol, period='1mo'):
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         hist['RSI'] = 100 - (100 / (1 + rs))
+        # ATR
+        hist['TR'] = hist[['High', 'Low', 'Close']].assign(
+            prev_close=hist['Close'].shift(1)
+        ).apply(lambda row: max(
+            row['High'] - row['Low'],
+            abs(row['High'] - row['prev_close']),
+            abs(row['Low'] - row['prev_close'])
+        ), axis=1)
+        hist['ATR'] = hist['TR'].rolling(window=14).mean()
+        # MACD
+        ema12 = hist['Close'].ewm(span=12, adjust=False).mean()
+        ema26 = hist['Close'].ewm(span=26, adjust=False).mean()
+        hist['MACD'] = ema12 - ema26
+        hist['MACD_SIGNAL'] = hist['MACD'].ewm(span=9, adjust=False).mean()
+        hist['MACD_HIST'] = hist['MACD'] - hist['MACD_SIGNAL']
         
         # Get company info
         try:
@@ -66,6 +102,11 @@ def get_stock_data(symbol, period='1mo'):
             'ma20': float(hist['MA20'].iloc[-1]),
             'ma50': float(hist['MA50'].iloc[-1]),
             'rsi': float(hist['RSI'].iloc[-1]),
+            'atr': float(hist['ATR'].iloc[-1]) if not pd.isna(hist['ATR'].iloc[-1]) else None,
+            'bb_upper': float(hist['BB_UPPER'].iloc[-1]) if not pd.isna(hist['BB_UPPER'].iloc[-1]) else None,
+            'bb_lower': float(hist['BB_LOWER'].iloc[-1]) if not pd.isna(hist['BB_LOWER'].iloc[-1]) else None,
+            'macd': float(hist['MACD'].iloc[-1]) if not pd.isna(hist['MACD'].iloc[-1]) else None,
+            'macd_signal': float(hist['MACD_SIGNAL'].iloc[-1]) if not pd.isna(hist['MACD_SIGNAL'].iloc[-1]) else None,
             'high': float(hist['High'].max()),
             'low': float(hist['Low'].min()),
             'hist_data': hist
@@ -109,40 +150,45 @@ def create_simple_chart(hist_data, symbol):
     return fig
 
 def create_technical_chart(hist_data):
-    """Create advanced technical chart"""
+    """Create advanced technical chart with BB, MACD, RSI"""
     fig = make_subplots(
-        rows=2, cols=1,
-        subplot_titles=('Price & Moving Averages', 'RSI Indicator'),
-        vertical_spacing=0.15,
-        row_heights=[0.7, 0.3]
+        rows=3, cols=1,
+        subplot_titles=('Price with MA & Bollinger Bands', 'MACD', 'RSI'),
+        vertical_spacing=0.08,
+        row_heights=[0.55, 0.25, 0.2]
     )
     
-    # Price with MA
-    fig.add_trace(
-        go.Scatter(x=hist_data.index, y=hist_data['Close'], name='Close'),
-        row=1, col=1
-    )
-    fig.add_trace(
-        go.Scatter(x=hist_data.index, y=hist_data['MA20'], name='MA20'),
-        row=1, col=1
-    )
-    fig.add_trace(
-        go.Scatter(x=hist_data.index, y=hist_data['MA50'], name='MA50'),
-        row=1, col=1
-    )
+    # Price with MA & BB
+    fig.add_trace(go.Candlestick(
+        x=hist_data.index,
+        open=hist_data['Open'],
+        high=hist_data['High'],
+        low=hist_data['Low'],
+        close=hist_data['Close'],
+        name='Price',
+        increasing_line_color='#22c55e',
+        decreasing_line_color='#ef4444',
+        showlegend=False
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MA20'], name='MA20', line=dict(color='#22d3ee', width=1.5)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MA50'], name='MA50', line=dict(color='#a855f7', width=1.2, dash='dot')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['BB_UPPER'], name='BB Upper', line=dict(color='#38bdf8', width=1, dash='dash')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['BB_LOWER'], name='BB Lower', line=dict(color='#38bdf8', width=1, dash='dash')), row=1, col=1)
+    
+    # MACD
+    fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MACD'], name='MACD', line=dict(color='#22d3ee', width=2)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MACD_SIGNAL'], name='Signal', line=dict(color='#facc15', width=1.5)), row=2, col=1)
+    fig.add_trace(go.Bar(x=hist_data.index, y=hist_data['MACD_HIST'], name='Hist', marker_color=['#22c55e' if v >=0 else '#ef4444' for v in hist_data['MACD_HIST']]), row=2, col=1)
     
     # RSI
-    fig.add_trace(
-        go.Scatter(x=hist_data.index, y=hist_data['RSI'], name='RSI'),
-        row=2, col=1
-    )
+    fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['RSI'], name='RSI', line=dict(color='#22d3ee', width=2)), row=3, col=1)
+    fig.add_hline(y=70, line_dash="dash", line_color="#ef4444", row=3, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="#22c55e", row=3, col=1)
+    fig.add_hline(y=50, line_dash="dot", line_color="#94a3b8", row=3, col=1)
     
-    # RSI levels
-    fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-    fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
-    fig.add_hline(y=50, line_dash="dot", line_color="gray", row=2, col=1)
-    
-    fig.update_layout(height=600, showlegend=True)
+    fig.update_layout(height=800, showlegend=True, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)')
+    fig.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)')
     return fig
 
 def get_recommendation(stock_data):
@@ -162,16 +208,146 @@ def get_recommendation(stock_data):
     else:
         return "HOLD", "Neutral market conditions", "orange"
 
+# ========== FUNDAMENTAL HELPERS ==========
+def safe_div(n, d):
+    try:
+        return n / d if d not in [0, None] else None
+    except Exception:
+        return None
+
+def fetch_fundamentals(symbol):
+    """Fetch basic fundamental data from yfinance. May be limited; handle missing gracefully."""
+    try:
+        ticker = yf.Ticker(symbol if symbol.startswith('^') else f"{symbol}.JK" if not symbol.endswith('.JK') and len(symbol) <=4 else symbol)
+        info = ticker.info
+        financials = ticker.financials
+        balance = ticker.balance_sheet
+        cashflow = ticker.cashflow
+        # use trailing twelve months or latest column
+        def latest(df, key):
+            try:
+                return df.loc[key].iloc[0]
+            except Exception:
+                return None
+        revenue = latest(financials, 'Total Revenue')
+        net_income = latest(financials, 'Net Income')
+        gross_profit = latest(financials, 'Gross Profit')
+        total_assets = latest(balance, 'Total Assets')
+        total_equity = latest(balance, 'Total Stockholder Equity')
+        total_debt = latest(balance, 'Total Debt')
+        shares_out = info.get('sharesOutstanding')
+        price = info.get('currentPrice')
+        eps_ttm = info.get('trailingEps')
+        div_rate = info.get('dividendRate')
+        book_value = info.get('bookValue')
+        # ratios
+        roe = safe_div(net_income, total_equity)
+        roa = safe_div(net_income, total_assets)
+        net_margin = safe_div(net_income, revenue)
+        gross_margin = safe_div(gross_profit, revenue)
+        per = safe_div(price, eps_ttm)
+        pbv = safe_div(price, book_value) if book_value else None
+        dy = safe_div(div_rate, price) if div_rate and price else None
+        der = safe_div(total_debt, total_equity)
+        current_ratio = None  # not available from yfinance easily
+        icr = None  # interest coverage not available directly
+        asset_turnover = safe_div(revenue, total_assets)
+        return {
+            "price": price,
+            "revenue": revenue,
+            "net_income": net_income,
+            "gross_profit": gross_profit,
+            "total_assets": total_assets,
+            "total_equity": total_equity,
+            "total_debt": total_debt,
+            "shares_out": shares_out,
+            "eps_ttm": eps_ttm,
+            "div_rate": div_rate,
+            "book_value": book_value,
+            "ratios": {
+                "roe": roe,
+                "roa": roa,
+                "net_margin": net_margin,
+                "gross_margin": gross_margin,
+                "per": per,
+                "pbv": pbv,
+                "dy": dy,
+                "der": der,
+                "current_ratio": current_ratio,
+                "icr": icr,
+                "asset_turnover": asset_turnover,
+            }
+        }
+    except Exception as e:
+        st.warning(f"Fundamental data not fully available: {e}")
+        return None
+
+def compute_signals(stock_data):
+    signals = []
+    # Trend
+    if stock_data['current_price'] > stock_data['ma50'] > stock_data['ma20']:
+        signals.append("Trend: Bullish (price > MA50 > MA20)")
+    elif stock_data['current_price'] < stock_data['ma50'] < stock_data['ma20']:
+        signals.append("Trend: Bearish (price < MA50 < MA20)")
+    else:
+        signals.append("Trend: Mixed/Sideways")
+    # RSI
+    rsi = stock_data['rsi']
+    if rsi > 70:
+        signals.append("RSI overbought (>70)")
+    elif rsi < 30:
+        signals.append("RSI oversold (<30)")
+    else:
+        signals.append("RSI neutral (30-70)")
+    # MACD
+    if stock_data.get('macd') is not None and stock_data.get('macd_signal') is not None:
+        if stock_data['macd'] > stock_data['macd_signal'] and stock_data['macd'] > 0:
+            signals.append("MACD bullish (line > signal > 0)")
+        elif stock_data['macd'] < stock_data['macd_signal'] and stock_data['macd'] < 0:
+            signals.append("MACD bearish (line < signal < 0)")
+        else:
+            signals.append("MACD neutral/crossing")
+    # Bollinger
+    if stock_data.get('bb_upper') and stock_data.get('bb_lower'):
+        if stock_data['current_price'] > stock_data['bb_upper']:
+            signals.append("Price above upper BB (possible overextension)")
+        elif stock_data['current_price'] < stock_data['bb_lower']:
+            signals.append("Price below lower BB (possible rebound)")
+    return signals
+
+# ========== INITIALIZE SESSION STATE ==========
+# Initialize default symbol for first visit (IHSG)
+if 'selected_symbol' not in st.session_state:
+    st.session_state.selected_symbol = "^JKSE"  # IHSG Index - default
+if 'auto_analyze' not in st.session_state:
+    st.session_state.auto_analyze = True  # Auto analyze on first load
+if 'first_load' not in st.session_state:
+    st.session_state.first_load = True  # Track first load
+
 # ========== UI ==========
 st.title("STOCKMIND AI")
 st.markdown("### Smart Stock Analysis Tool")
 
 # Sidebar
 with st.sidebar:
-    st.header("Settings")
+    st.header("Analyst")
     
-    # Stock input
-    symbol = st.text_input("Stock Symbol", "BBCA").upper()
+    # Dropdown popular stocks only (no manual input)
+    popular_stocks = ["^JKSE", "BBCA", "BBRI", "BMRI", "TLKM", "ASII", "UNVR", "ICBP", "INDF"]
+    popular_map = {"^JKSE": "IHSG"} | {s: s for s in popular_stocks if s != "^JKSE"}
+    selected_from_list = st.selectbox(
+        "Stock Symbol",
+        options=popular_stocks,
+        format_func=lambda x: popular_map.get(x, x),
+        index=popular_stocks.index(st.session_state.selected_symbol) if st.session_state.selected_symbol in popular_stocks else 0,
+        key="popular_select"
+    )
+    
+    # Update symbol when dropdown changes
+    if selected_from_list != st.session_state.selected_symbol:
+        st.session_state.selected_symbol = selected_from_list
+        st.session_state.auto_analyze = True
+        st.session_state.first_load = False
     
     # Period selection
     period = st.selectbox(
@@ -187,17 +363,10 @@ with st.sidebar:
         horizontal=True
     )
     
-    # Popular stocks
-    st.markdown("### Popular Stocks")
-    popular_stocks = ["BBCA", "BBRI", "BMRI", "TLKM", "ASII", "UNVR", "ICBP", "INDF"]
-    cols = st.columns(2)
-    for idx, stock in enumerate(popular_stocks):
-        if cols[idx % 2].button(stock, use_container_width=True):
-            symbol = stock
-            st.rerun()
-    
     # Analyze button
     analyze_clicked = st.button("Analyze Stock", type="primary", use_container_width=True)
+    if analyze_clicked:
+        st.session_state.auto_analyze = True
     
     st.markdown("---")
     
@@ -225,13 +394,27 @@ with st.sidebar:
     st.caption("Powered by Streamlit")
 
 # Main Content - Tabs
-if analyze_clicked or symbol:
-    with st.spinner("Analyzing stock data..."):
+# Auto analyze on first load or when symbol changes
+# Use the symbol from session state to ensure consistency
+current_symbol = st.session_state.selected_symbol
+should_analyze = analyze_clicked or st.session_state.auto_analyze or (st.session_state.first_load and current_symbol)
+
+if should_analyze:
+    # Use current_symbol for analysis
+    symbol = current_symbol
+    # Reset flags after first load
+    if st.session_state.first_load:
+        st.session_state.first_load = False
+    if st.session_state.auto_analyze:
+        st.session_state.auto_analyze = False
+    with st.spinner(f"Analyzing {symbol}..."):
         stock_data, hist_data = get_stock_data(symbol, period)
         
         if stock_data and hist_data is not None:
+            # Fetch fundamentals for report
+            fundamentals = fetch_fundamentals(symbol)
             # Create tabs
-            tab1, tab2, tab3 = st.tabs(["Dashboard", "Technical", "Details"])
+            tab1, tab2, tab3, tab4 = st.tabs(["Dashboard", "Technical", "Details", "Signals & Fundamental"])
             
             with tab1:
                 # Display metrics
@@ -357,63 +540,50 @@ if analyze_clicked or symbol:
                     st.write(f"- Today: {stock_data['volume']:,}")
                     st.write(f"- Average: {hist_data['Volume'].mean():,.0f}")
                     st.write(f"- Max: {hist_data['Volume'].max():,}")
+            
+            with tab4:
+                colA, colB = st.columns([2, 1])
+                with colA:
+                    st.subheader("Signals")
+                    for sig in compute_signals(stock_data):
+                        st.write(f"- {sig}")
+                    if stock_data.get('atr'):
+                        st.caption(f"ATR(14): {stock_data['atr']:.2f}")
+                with colB:
+                    st.subheader("Suggested Levels (tech)")
+                    if stock_data.get('atr'):
+                        sl = stock_data['current_price'] - 1.5 * stock_data['atr']
+                        tp1 = stock_data['current_price'] + 1.5 * stock_data['atr']
+                        tp2 = stock_data['current_price'] + 2.5 * stock_data['atr']
+                        st.write(f"Stop Loss: ~ {sl:,.2f}")
+                        st.write(f"TP1: ~ {tp1:,.2f}")
+                        st.write(f"TP2: ~ {tp2:,.2f}")
+                    else:
+                        st.info("ATR not available for SL/TP suggestion.")
+                
+                st.markdown("---")
+                st.subheader("Fundamental Snapshot")
+                if fundamentals:
+                    r = fundamentals["ratios"]
+                    st.write("Price:", fundamentals.get("price"))
+                    st.write("PER:", f"{r.get('per'):.2f}" if r.get('per') else "N/A")
+                    st.write("PBV:", f"{r.get('pbv'):.2f}" if r.get('pbv') else "N/A")
+                    st.write("ROE:", f"{r.get('roe')*100:.1f}%" if r.get('roe') else "N/A")
+                    st.write("Net Margin:", f"{r.get('net_margin')*100:.1f}%" if r.get('net_margin') else "N/A")
+                    st.write("DER:", f"{r.get('der'):.2f}" if r.get('der') else "N/A")
+                    st.write("Dividend Yield:", f"{r.get('dy')*100:.2f}%" if r.get('dy') else "N/A")
+                else:
+                    st.info("Fundamental data not available from source.")
                 
         else:
             st.error(f"Cannot fetch data for {symbol}. Please check the stock symbol.")
+            # Fallback to welcome screen if data fetch fails
+            st.info("💡 Try entering a valid stock symbol in the sidebar, or click on one of the popular stocks.")
 else:
-    # Welcome screen
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("""
-        ## Welcome to STOCKMIND AI!
-        
-        **Your intelligent stock analysis assistant.**
-        
-        ### Features:
-        - Real-time stock data from Yahoo Finance
-        - Technical indicators (RSI, Moving Averages)
-        - Interactive charts with Plotly
-        - Simple buy/sell recommendations
-        - Indonesian stock market focus
-        
-        ### How to use:
-        1. Enter stock symbol in sidebar
-        2. Select time period
-        3. Click "Analyze Stock" button
-        4. Explore different tabs for insights
-        
-        ### Popular Indonesian Stocks:
-        - **BBCA** - Bank Central Asia
-        - **BBRI** - Bank Rakyat Indonesia  
-        - **BMRI** - Bank Mandiri
-        - **TLKM** - Telkom Indonesia
-        - **ASII** - Astra International
-        - **UNVR** - Unilever Indonesia
-        """)
-    
-    with col2:
-        st.subheader("Quick Preview")
-        
-        example_data = [
-            {"Symbol": "BBCA", "Price": "Rp 9,850", "Change": "+1.5%"},
-            {"Symbol": "BBRI", "Price": "Rp 4,920", "Change": "+0.8%"},
-            {"Symbol": "BMRI", "Price": "Rp 6,750", "Change": "-0.3%"},
-            {"Symbol": "TLKM", "Price": "Rp 3,280", "Change": "+0.5%"},
-            {"Symbol": "ASII", "Price": "Rp 5,150", "Change": "+2.1%"},
-        ]
-        
-        for stock in example_data:
-            with st.container():
-                cols = st.columns([1, 2, 1])
-                with cols[0]:
-                    st.markdown(f"**{stock['Symbol']}**")
-                with cols[1]:
-                    st.markdown(stock['Price'])
-                with cols[2]:
-                    color = "green" if "+" in stock['Change'] else "red"
-                    st.markdown(f"<span style='color:{color}'>{stock['Change']}</span>", unsafe_allow_html=True)
-                st.divider()
+    # Fallback when analysis not executed
+    current_symbol = st.session_state.get("selected_symbol", "^JKSE")
+    st.error(f"Cannot fetch data for {current_symbol}. Please check the stock symbol.")
+    st.info("💡 Masukkan simbol saham yang valid di sidebar atau gunakan dropdown popular stocks.")
 
 # Footer
 st.markdown("---")

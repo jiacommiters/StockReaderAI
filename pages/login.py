@@ -7,6 +7,13 @@ st.set_page_config(
     layout="centered"
 )
 
+# ========== INITIALIZE SESSION STATE ==========
+# Initialize session state for authentication persistence
+if 'user' not in st.session_state:
+    st.session_state.user = None
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
 # Redirect if already logged in
 if UserAuth.is_authenticated():
     st.success("You are already logged in!")
@@ -102,8 +109,13 @@ with st.form("login_form"):
         else:
             success, message, user_data = UserAuth.login_user(username, password)
             if success:
+                # Ensure session state is properly initialized
                 st.session_state.user = user_data
+                st.session_state.authenticated = True
                 st.success(message)
+                # Small delay to ensure session state is saved
+                import time
+                time.sleep(0.1)
                 st.rerun()
             else:
                 st.error(message)
