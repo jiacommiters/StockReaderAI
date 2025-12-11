@@ -273,7 +273,7 @@ with main_col:
 with side_col:
     # Watchlist
     st.markdown("#### Watchlist")
-    watchlist_symbols = ["BBCA", "BBRI", "BMRI", "TLKM", "ASII", "IHSG"]
+    watchlist_symbols = ["BBCA", "BBRI", "BMRI", "TLKM", "ASII", "UNVR"]
     watch_rows = []
     for sym in watchlist_symbols:
         data = get_stock_data(sym, period="1mo")
