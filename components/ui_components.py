@@ -1,297 +1,342 @@
 """
-UI Components for ChartMaster Pro
+UI Components for StockReaderAI
 Reusable components for Streamlit app
 """
 
 import streamlit as st
+import pandas as pd
 from typing import Optional, List, Dict, Any
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 def load_design_system():
     """Load the design system CSS"""
     import os
+    # Path relative to this file
     css_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'css', 'design-system.css')
+    
     try:
         if os.path.exists(css_path):
             with open(css_path, 'r', encoding='utf-8') as f:
                 css = f.read()
+            # Inject CSS with unique ID to prevent duplicates if called multiple times
             st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
         else:
-            # Fallback: Load inline CSS if file not found
-            st.markdown("""
-            <style>
-                :root {
-                    --color-primary-dark: #0D1B2A;
-                    --color-secondary-dark: #1B263B;
-                    --color-accent-blue: #4361EE;
-                }
-                body { background-color: var(--color-primary-dark); color: #FFFFFF; }
-            </style>
-            """, unsafe_allow_html=True)
+            st.error("Design system CSS not found!")
     except Exception as e:
         st.warning(f"Design system loading issue: {e}")
 
-def render_header(nav_items: List[Dict[str, str]], current_page: str = "Dashboard"):
+def render_app_header(title: str, subtitle: Optional[str] = None):
     """
-    Render the main header with navigation
-    
-    Args:
-        nav_items: List of dicts with 'label' and 'page' keys
-        current_page: Current active page name
+    Render a consistent application header.
     """
-    # Build navigation items HTML
-    nav_html = ""
-    for item in nav_items:
-        active_class = "active" if item['label'] == current_page else ""
-        # Use Streamlit page navigation instead of href
-        nav_html += f'<a href="#" class="nav-item {active_class}" onclick="return false;">{item["label"]}</a>'
-    
-    header_html = f"""<div class="chartmaster-header">
-<div class="header-logo">
-<svg class="header-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-<path d="M3 3v18h18M7 16l4-8 4 8 4-12"/>
-</svg>
-<span>ChartMaster Pro</span>
-</div>
-<nav class="header-nav">
-{nav_html}
-</nav>
-<div class="header-actions">
-<div style="position: relative;">
-<svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 1;">
-<circle cx="11" cy="11" r="8"></circle>
-<path d="m21 21-4.35-4.35"></path>
-</svg>
-<input type="text" class="search-bar" placeholder="Search symbol..." style="padding-left: 36px;">
-</div>
-<button class="icon-button" title="Notifications" style="position: relative;">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
-<path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-</svg>
-<span class="badge">3</span>
-</button>
-<button class="icon-button" title="Theme">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-<circle cx="12" cy="12" r="4"></circle>
-<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
-</svg>
-</button>
-<button class="icon-button" title="Profile">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-<circle cx="12" cy="7" r="4"></circle>
-</svg>
-</button>
-</div>
-</div>"""
-    
-    # Render HTML directly with unsafe_allow_html
-    st.markdown(header_html, unsafe_allow_html=True)
+    st.markdown(f'<h1 class="main-title">{title}</h1>', unsafe_allow_html=True)
+    if subtitle:
+        st.markdown(f'<p class="text-muted" style="margin-top: -10px; margin-bottom: 2rem;">{subtitle}</p>', unsafe_allow_html=True)
 
-def render_widget(title: str, content: str, size: str = "small", actions: Optional[List[str]] = None):
+def render_sidebar(current_page: str = "Dashboard"):
     """
-    Render a dashboard widget
-    
-    Args:
-        title: Widget title
-        content: HTML content for widget body
-        size: Widget size (small, medium, large)
-        actions: List of action button labels
+    Render the common sidebar with navigation and user info.
     """
-    actions_html = ""
-    if actions:
-        actions_html = '<div class="widget-actions">'
-        for action in actions:
-            actions_html += f'<button class="widget-action-btn" title="{action}">⋯</button>'
-        actions_html += '</div>'
-    
-    widget_html = f"""
-    <div class="widget widget-{size}">
-        <div class="widget-header">
-            <h3 class="widget-title">{title}</h3>
-            {actions_html}
+    with st.sidebar:
+        # Branding
+        st.markdown("""
+        <div class="sidebar-brand">
+            <h2>StockReader</h2>
+            <p class="text-muted" style="font-size: 0.8rem; margin:0;">Professional Analytics</p>
         </div>
-        <div class="widget-content">
-            {content}
+        """, unsafe_allow_html=True)
+        
+        # Navigation Links
+        # Only keep pages that actually exist: Dashboard, Charts, Research, Home (implied)
+        # Assuming Research exists, otherwise remove it too if user deleted it (user didn't explicitely say Research, but said 'scanner and watchlist' etc)
+        # Let's keep basics + Research if it exists.
+        
+        # Navigation Links - Updated for Streamlit multipage app structure
+        nav_items = [
+            {"name": "Home", "link": "../pages/1_home", "icon": "🏠"},
+            {"name": "Dashboard", "link": "../pages/2_dashboard", "icon": "📊"},
+            {"name": "Charts", "link": "../pages/3_charts", "icon": "📈"},
+            {"name": "Research", "link": "../pages/4_research", "icon": "🔬"},
+        ]
+        
+        st.markdown('<div class="nav-section-label">MAIN MENU</div>', unsafe_allow_html=True)
+        
+        for item in nav_items:
+            # Active state logic
+            active_class = "active" if item["name"] == current_page else ""
+            
+            # Render link
+            st.markdown(f"""
+            <a href="{item['link']}" class="nav-link {active_class}" target="_self">
+                <span class="nav-icon">{item['icon']}</span>
+                <span>{item['name']}</span>
+            </a>
+            """, unsafe_allow_html=True)
+
+        # Tools Section
+        st.markdown('<div class="nav-section-label">TOOLS</div>', unsafe_allow_html=True)
+        
+        # Checkbox with custom container style
+        with st.container():
+            st.checkbox("Auto-Analyze", value=st.session_state.get('auto_analyze', False), key='sidebar_auto_analyze')
+        
+        # Footer
+        st.markdown("""
+        <div class="sidebar-footer">
+            <div>StockReader AI v1.4</div>
+            <div style="margin-top:4px;">Pro License Active</div>
         </div>
-    </div>
-    """
-    return widget_html
+        """, unsafe_allow_html=True)
 
-def render_data_table(headers: List[str], rows: List[List[Any]], sortable: bool = True):
+def render_metric_card(label: str, value: Any, change: Any = None, is_currency: bool = False, prefix: str = ""):
     """
-    Render a styled data table
-    
-    Args:
-        headers: List of column headers
-        rows: List of rows, each row is a list of cell values
-        sortable: Whether columns are sortable
+    Render a styled metric card.
     """
-    table_html = '<table class="data-table">'
-    
-    # Header
-    table_html += '<thead><tr>'
-    for header in headers:
-        sort_icon = ' ↕' if sortable else ''
-        table_html += f'<th>{header}{sort_icon}</th>'
-    table_html += '</tr></thead>'
-    
-    # Body
-    table_html += '<tbody>'
-    for row in rows:
-        table_html += '<tr>'
-        for cell in row:
-            table_html += f'<td>{cell}</td>'
-        table_html += '</tr>'
-    table_html += '</tbody></table>'
-    
-    return table_html
+    # Format value
+    if isinstance(value, float):
+        display_value = f"{prefix}{value:,.2f}"
+    elif isinstance(value, int):
+        display_value = f"{prefix}{value:,}"
+    else:
+        display_value = str(value)
 
-def render_chart_toolbar(timeframes: List[str] = None, active_timeframe: str = "1D"):
-    """
-    Render chart toolbar with timeframe selector
-    
-    Args:
-        timeframes: List of timeframe options
-        active_timeframe: Currently active timeframe
-    """
-    if timeframes is None:
-        timeframes = ["1m", "5m", "15m", "1H", "4H", "1D", "1W", "1M"]
-    
-    toolbar_html = '<div class="chart-toolbar">'
-    toolbar_html += '<div class="timeframe-selector">'
-    
-    for tf in timeframes:
-        active_class = "active" if tf == active_timeframe else ""
-        toolbar_html += f'<button class="timeframe-btn {active_class}">{tf}</button>'
-    
-    toolbar_html += '</div>'
-    toolbar_html += """
-        <button class="icon-button" title="Chart Type">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 3v18h18M7 16l4-8 4 8 4-12"/>
-            </svg>
-        </button>
-        <button class="icon-button" title="Indicators">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-            </svg>
-        </button>
-        <button class="icon-button" title="Drawing Tools">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-        </button>
-        <button class="icon-button" title="Compare">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
-        </button>
-        <button class="icon-button" title="Fullscreen">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
-            </svg>
-        </button>
-    </div>
-    """
-    return toolbar_html
-
-def render_metric_card(label: str, value: str, change: Optional[str] = None, 
-                       change_type: str = "neutral"):
-    """
-    Render a metric card
-    
-    Args:
-        label: Metric label
-        value: Main value
-        change: Change value (optional)
-        change_type: Type of change (positive, negative, neutral)
-    """
+    # Format change
     change_html = ""
-    if change:
-        change_class = f"price-{change_type}"
-        change_html = f'<div class="{change_class}" style="font-size: 0.875rem; margin-top: 4px;">{change}</div>'
+    if change is not None:
+        try:
+            change_val = float(change)
+            if change_val > 0:
+                color_class = "text-green bg-green-soft"
+                icon = "▲"
+                sign = "+"
+            elif change_val < 0:
+                color_class = "text-red bg-red-soft"
+                icon = "▼"
+                sign = ""
+            else:
+                color_class = "text-muted"
+                icon = "−"
+                sign = ""
+            
+            change_html = f'''
+            <div class="metric-change {color_class}" style="padding: 2px 8px; border-radius: 12px; display: inline-flex; font-size: 0.75rem;">
+                <span style="margin-right: 4px;">{icon}</span> {sign}{change_val:,.2f}%
+            </div>
+            '''
+        except:
+            pass
+
+    html = f"""
+    <div class="metric-box">
+        <div class="metric-label">{label}</div>
+        <div class="metric-value">{display_value}</div>
+        {change_html}
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+def render_stock_chart(hist_data, symbol):
+    """
+    Render the main stock chart using Plotly.
+    Similar to existing logic but standardized.
+    """
+    if hist_data is None or hist_data.empty:
+        st.warning("No data available to chart.")
+        return
+
+    fig = make_subplots(
+        rows=2, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.03, 
+        row_heights=[0.75, 0.25]
+    )
+
+    # Candlestick
+    fig.add_trace(go.Candlestick(
+        x=hist_data.index,
+        open=hist_data['Open'],
+        high=hist_data['High'],
+        low=hist_data['Low'],
+        close=hist_data['Close'],
+        name='Price',
+        increasing_line_color='#22c55e',
+        decreasing_line_color='#ef4444',
+        showlegend=False
+    ), row=1, col=1)
+
+    # MAs
+    if 'MA20' in hist_data.columns:
+        fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MA20'], name='MA20', line=dict(color='#22d3ee', width=1)), row=1, col=1)
+    if 'MA50' in hist_data.columns:
+        fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MA50'], name='MA50', line=dict(color='#a855f7', width=1, dash='dot')), row=1, col=1)
+
+    # Volume
+    colors = ['#22c55e' if row['Close'] >= row['Open'] else '#ef4444' for i, row in hist_data.iterrows()]
+    fig.add_trace(go.Bar(
+        x=hist_data.index, 
+        y=hist_data['Volume'], 
+        name='Volume',
+        marker_color=colors,
+        opacity=0.8
+    ), row=2, col=1)
+
+    # Layout
+    fig.update_layout(
+        height=600,
+        margin=dict(l=10, r=10, t=10, b=10),
+        template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        xaxis_rangeslider_visible=False,
+        hovermode='x unified',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
     
-    card_html = f"""
-    <div class="widget widget-small">
-        <div style="text-align: center;">
-            <div class="text-secondary" style="font-size: 0.75rem; margin-bottom: 8px;">{label}</div>
-            <div class="mono text-primary" style="font-size: 1.5rem; font-weight: 600;">{value}</div>
-            {change_html}
+    # Grid customization
+    fig.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)', gridwidth=1)
+    fig.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)', gridwidth=1)
+
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+def render_empty_state(icon="🔍", title="No Data", description="Select a stock to view analysis."):
+    st.markdown(f"""
+    <div style="text-align: center; padding: 4rem 2rem; border: 2px dashed rgba(255,255,255,0.1); border-radius: 12px; margin: 2rem 0;">
+        <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">{icon}</div>
+        <h3 style="color: var(--color-text-primary); margin-bottom: 0.5rem;">{title}</h3>
+        <p class="text-muted">{description}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_stock_info_card(data: Dict[str, Any]):
+    """
+    Render a card with stock company info and momentum status.
+    """
+    rsi = data.get('rsi', 50)
+    status = "NEUTRAL"
+    color = "#eab308"  # yellow
+    if rsi > 70:
+        status = "OVERBOUGHT"
+        color = "#ef4444"  # red
+    elif rsi < 30:
+        status = "OVERSOLD"
+        color = "#22c55e"  # green
+    
+    prev_close = data.get('previous_close', 0)
+    
+    st.markdown(f"""
+    <div style="background: #1e293b; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.5rem;">
+        <h4 style="margin: 0 0 1rem 0; color: #f8fafc;">{data.get('name', 'Unknown')}</h4>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #64748b;">Sector</span>
+                <span style="color: #f8fafc;">{data.get('sector', 'N/A')}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #64748b;">Prev Close</span>
+                <span style="color: #f8fafc;">Rp {prev_close:,.2f}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #64748b;">RSI (14)</span>
+                <span style="color: #f8fafc;">{rsi:.1f}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #64748b;">Momentum</span>
+                <span style="color: {color}; font-weight: 700;">{status}</span>
+            </div>
         </div>
     </div>
-    """
-    return card_html
+    """, unsafe_allow_html=True)
 
-def render_notification(message: str, type: str = "info", duration: int = 5000):
+
+def render_technical_signals(data: Dict[str, Any]):
     """
-    Render a notification
+    Render a card with technical analysis signals.
+    """
+    signals = []
     
-    Args:
-        message: Notification message
-        type: Notification type (success, error, warning, info)
-        duration: Auto-dismiss duration in ms
-    """
-    notification_html = f"""
-    <div class="notification {type}" id="notification-{id(message)}">
-        <div style="font-weight: 500; margin-bottom: 4px;">{type.title()}</div>
-        <div style="font-size: 0.875rem; color: var(--color-text-secondary);">{message}</div>
+    # Price vs MA50
+    if data.get('current_price', 0) > data.get('ma50', 0):
+        signals.append(("✅", "Price above MA50", "Bullish Trend"))
+    else:
+        signals.append(("🔻", "Price below MA50", "Bearish Trend"))
+    
+    # MACD
+    if data.get('macd', 0) > data.get('macd_signal', 0):
+        signals.append(("✅", "MACD Crossover", "Bullish Signal"))
+    else:
+        signals.append(("🔻", "MACD Divergence", "Bearish Signal"))
+    
+    # RSI
+    rsi = data.get('rsi', 50)
+    if rsi > 70:
+        signals.append(("⚠️", "RSI Overbought", f"RSI: {rsi:.1f}"))
+    elif rsi < 30:
+        signals.append(("💡", "RSI Oversold", f"RSI: {rsi:.1f}"))
+    else:
+        signals.append(("➖", "RSI Neutral", f"RSI: {rsi:.1f}"))
+    
+    signals_html = ""
+    for icon, title, desc in signals:
+        signals_html += f"""
+        <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <span style="font-size: 1.25rem;">{icon}</span>
+            <div>
+                <div style="font-weight: 500; color: #f8fafc;">{title}</div>
+                <div style="font-size: 0.8rem; color: #64748b;">{desc}</div>
+            </div>
+        </div>
+        """
+    
+    st.markdown(f"""
+    <div style="background: #1e293b; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.5rem;">
+        <h4 style="margin: 0 0 1rem 0; color: #f8fafc;">📊 Technical Signals</h4>
+        {signals_html}
     </div>
-    <script>
-        setTimeout(function() {{
-            var el = document.getElementById('notification-{id(message)}');
-            if (el) el.style.opacity = '0';
-        }}, {duration});
-    </script>
-    """
-    return notification_html
+    """, unsafe_allow_html=True)
 
-def render_empty_state(icon: str, title: str, description: str, action_label: Optional[str] = None):
-    """
-    Render an empty state
-    
-    Args:
-        icon: Icon name or SVG
-        title: Empty state title
-        description: Empty state description
-        action_label: Optional action button label
-    """
-    action_html = ""
-    if action_label:
-        action_html = f'<button class="btn btn-primary" style="margin-top: 16px;">{action_label}</button>'
-    
-    empty_html = f"""
-    <div class="empty-state">
-        <div class="empty-state-icon">{icon}</div>
-        <h3 class="empty-state-title">{title}</h3>
-        <p class="empty-state-description">{description}</p>
-        {action_html}
-    </div>
-    """
-    return empty_html
 
-def render_skeleton(type: str = "text", count: int = 3):
+def render_quick_picks(symbols: List[str], key_prefix: str = "qp"):
     """
-    Render loading skeleton
-    
-    Args:
-        type: Skeleton type (text, chart, table)
-        count: Number of skeleton items
+    Render quick pick stock buttons.
+    Returns the selected symbol if any button is clicked.
     """
-    skeleton_html = ""
+    st.markdown("### ⚡ Quick Picks")
+    cols = st.columns(len(symbols))
     
-    if type == "text":
-        for _ in range(count):
-            skeleton_html += '<div class="skeleton skeleton-text"></div>'
-    elif type == "chart":
-        skeleton_html = '<div class="skeleton skeleton-chart"></div>'
-    elif type == "table":
-        for _ in range(count):
-            skeleton_html += '<div class="skeleton" style="height: 48px; margin-bottom: 8px;"></div>'
+    for i, sym in enumerate(symbols):
+        with cols[i]:
+            if st.button(sym, key=f"{key_prefix}_{sym}", use_container_width=True):
+                return sym
     
-    return skeleton_html
+    return None
 
+
+def render_search_bar(default_symbol: str = "", default_period: str = "3mo"):
+    """
+    Render the search bar with symbol input, period selector, and analyze button.
+    Returns tuple: (symbol, period, analyze_clicked)
+    """
+    col_search, col_period, col_action = st.columns([3, 1.5, 1])
+    
+    with col_search:
+        symbol = st.text_input(
+            "🔍 Search Symbol", 
+            value=default_symbol, 
+            placeholder="e.g. BBCA, TLKM, ASII..."
+        )
+    
+    with col_period:
+        period = st.selectbox(
+            "⏱️ Period", 
+            ["1mo", "3mo", "6mo", "1y", "2y", "5y"], 
+            index=["1mo", "3mo", "6mo", "1y", "2y", "5y"].index(default_period)
+        )
+    
+    with col_action:
+        st.write("")  # Spacer
+        st.write("")
+        analyze_clicked = st.button("🚀 Analyze", type="primary", use_container_width=True)
+    
+    return symbol.upper() if symbol else "", period, analyze_clicked

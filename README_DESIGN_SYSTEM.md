@@ -1,7 +1,7 @@
-# ChartMaster Pro - Design System Documentation
+# StockReaderAI - Design System Documentation
 
 ## Overview
-ChartMaster Pro adalah platform analisis trading profesional dengan design system lengkap yang mengikuti spesifikasi modern untuk aplikasi finansial.
+StockReaderAI adalah platform analisis trading profesional dengan design system lengkap yang mengikuti spesifikasi modern untuk aplikasi finansial.
 
 ## Design System
 
@@ -314,5 +314,5 @@ st.markdown(table_html, unsafe_allow_html=True)
 
 ## License
 
-Proprietary - ChartMaster Pro
+Proprietary - StockReaderAI
 

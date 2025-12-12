@@ -1,4 +1,4 @@
-# ChartMaster Pro - Quick Start Guide
+# StockReaderAI - Quick Start Guide
 
 ## Setup
 
