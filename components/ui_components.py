@@ -91,7 +91,7 @@ def render_sidebar(current_page: str = "Dashboard"):
 
 def render_metric_card(label: str, value: Any, change: Any = None, is_currency: bool = False, prefix: str = ""):
     """
-    Render a styled metric card.
+    Render a styled metric card with full inline styles.
     """
     # Format value
     if isinstance(value, float):
@@ -101,39 +101,32 @@ def render_metric_card(label: str, value: Any, change: Any = None, is_currency: 
     else:
         display_value = str(value)
 
-    # Format change
+    # Format change HTML
     change_html = ""
     if change is not None:
         try:
             change_val = float(change)
             if change_val > 0:
-                color_class = "text-green bg-green-soft"
+                bg_color = "rgba(34, 197, 94, 0.1)"
+                text_color = "#22c55e"
                 icon = "▲"
                 sign = "+"
             elif change_val < 0:
-                color_class = "text-red bg-red-soft"
+                bg_color = "rgba(239, 68, 68, 0.1)"
+                text_color = "#ef4444"
                 icon = "▼"
                 sign = ""
             else:
-                color_class = "text-muted"
+                bg_color = "transparent"
+                text_color = "#64748b"
                 icon = "−"
                 sign = ""
             
-            change_html = f'''
-            <div class="metric-change {color_class}" style="padding: 2px 8px; border-radius: 12px; display: inline-flex; font-size: 0.75rem;">
-                <span style="margin-right: 4px;">{icon}</span> {sign}{change_val:,.2f}%
-            </div>
-            '''
+            change_html = f'''<div style="padding: 2px 8px; border-radius: 12px; display: inline-flex; align-items: center; font-size: 0.75rem; background: {bg_color}; color: {text_color};"><span style="margin-right: 4px;">{icon}</span>{sign}{change_val:,.2f}%</div>'''
         except:
             pass
 
-    html = f"""
-    <div class="metric-box">
-        <div class="metric-label">{label}</div>
-        <div class="metric-value">{display_value}</div>
-        {change_html}
-    </div>
-    """
+    html = f'''<div style="background: #1e293b; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.25rem; text-align: center;"><div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 4px;">{label}</div><div style="font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f8fafc; margin: 4px 0;">{display_value}</div>{change_html}</div>'''
     st.markdown(html, unsafe_allow_html=True)
 
 def render_stock_chart(hist_data, symbol):
@@ -252,7 +245,7 @@ def render_stock_info_card(data: Dict[str, Any]):
 
 def render_technical_signals(data: Dict[str, Any]):
     """
-    Render a card with technical analysis signals.
+    Render a card with technical analysis signals using single-line HTML.
     """
     signals = []
     
@@ -277,24 +270,13 @@ def render_technical_signals(data: Dict[str, Any]):
     else:
         signals.append(("➖", "RSI Neutral", f"RSI: {rsi:.1f}"))
     
+    # Build signals HTML as single line
     signals_html = ""
     for icon, title, desc in signals:
-        signals_html += f"""
-        <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <span style="font-size: 1.25rem;">{icon}</span>
-            <div>
-                <div style="font-weight: 500; color: #f8fafc;">{title}</div>
-                <div style="font-size: 0.8rem; color: #64748b;">{desc}</div>
-            </div>
-        </div>
-        """
+        signals_html += f'<div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);"><span style="font-size: 1.25rem;">{icon}</span><div><div style="font-weight: 500; color: #f8fafc;">{title}</div><div style="font-size: 0.8rem; color: #64748b;">{desc}</div></div></div>'
     
-    st.markdown(f"""
-    <div style="background: #1e293b; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.5rem;">
-        <h4 style="margin: 0 0 1rem 0; color: #f8fafc;">📊 Technical Signals</h4>
-        {signals_html}
-    </div>
-    """, unsafe_allow_html=True)
+    html = f'<div style="background: #1e293b; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.5rem;"><h4 style="margin: 0 0 1rem 0; color: #f8fafc;">📊 Technical Signals</h4>{signals_html}</div>'
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def render_quick_picks(symbols: List[str], key_prefix: str = "qp"):
